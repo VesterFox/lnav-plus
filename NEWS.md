@@ -171,6 +171,11 @@ Features:
   only write the messages in a time range.  They
   accept the same kinds of times as the `-S` and `-U`
   options.
+* Added the `stand-dark` and `stand-light` themes and
+  the `:toggle-theme` command for switching between
+  two themes.  The `F10` hotkey toggles between the
+  two new themes and the selected theme is saved in
+  the configuration.
 
 Interface Changes:
 * Moving horizontally now defaults to moving to the

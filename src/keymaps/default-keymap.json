@@ -16,7 +16,8 @@
         "keymap_def_next_section": "Press ${ansi_bold}}${ansi_norm} to move to the next section in the view",
         "keymap_def_next_mark": "Press ${ansi_bold}c${ansi_norm} to copy marked lines to the clipboard; press ${ansi_bold}C${ansi_norm} to clear marked lines",
         "keymap_def_time_offset": "Press ${ansi_bold}s${ansi_norm}/${ansi_bold}S${ansi_norm} to move forward/backward through slow downs",
-        "keymap_def_breakpoint": "Press ${ansi_bold}F7${ansi_norm}/${ansi_bold}F8${ansi_norm} to move to the previous/next breakpoint"
+        "keymap_def_breakpoint": "Press ${ansi_bold}F7${ansi_norm}/${ansi_bold}F8${ansi_norm} to move to the previous/next breakpoint",
+        "keymap_def_toggle_theme": "Press ${ansi_bold}F10${ansi_norm} to toggle the dark/light theme"
     },
     "ui": {
         "keymap-defs": {
@@ -35,6 +36,11 @@
                 },
                 "f8": {
                     "command": "|lnav-moveto-breakpoint next"
+                },
+                "f10": {
+                    "id": "org.lnav.key.theme.toggle",
+                    "command": ":toggle-theme stand-dark stand-light",
+                    "alt-msg": "${keymap_def_toggle_theme}"
                 },
                 "x02": {
                     "command": ":toggle-breakpoint",

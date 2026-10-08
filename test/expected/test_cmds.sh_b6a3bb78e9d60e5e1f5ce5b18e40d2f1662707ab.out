@@ -389,6 +389,8 @@ can always use [37m[40m q [0m to pop the top view off of the stack.
                 line instead of keeping it fixed at the top of the
                 current screen.                                   
 [1m F2             Toggle mouse support.                             [0m
+[1m F10            Toggle between the [0m[1m[37m[40m stand-dark [0m[1m and [0m[1m[37m[40m stand-light [0m[1m [0m
+[1m                themes.                                           [0m
 
 [4mQuery[0m
 
@@ -939,7 +941,7 @@ For support questions, email:
   [4mvalue[0m    The value to write.  If not given, the current
            value is returned
 [4mSee Also[0m
-  [1m:reset-config[0m
+  [1m:reset-config[0m, [1m:toggle-theme[0m
 [4mExamples[0m
 #1 To read the configuration of the '/ui/clock-format' option:
    [37m[40m:[0m[1m[36m[40mconfig[0m[37m[40m /ui/clock-format                          [0m
@@ -1809,7 +1811,7 @@ For support questions, email:
 [4mParameter[0m
   [4moption[0m   The path to the option to reset
 [4mSee Also[0m
-  [1m:config[0m
+  [1m:config[0m, [1m:toggle-theme[0m
 [4mExample[0m
 #1 To reset the '/ui/clock-format' option back to the builtin default:
    [37m[40m:[0m[1m[36m[40mreset-config[0m[37m[40m /ui/clock-format                    [0m
@@ -2070,6 +2072,21 @@ For support questions, email:
   [1m:clear-all-sticky-headers[0m, [1m:enable-word-wrap[0m, [1m:hide-fields[0m, 
   [1m:hide-unmarked-lines[0m, [1m:mark[0m, [1m:next-mark[0m, [1m:prev-mark[0m, 
   [1m:set-text-view-mode[0m
+
+[4m:[0m[1m[4mtoggle-theme[0m[4m [0m[4mtheme1[0m[4m [0m[4mtheme2[0m
+══════════════════════════════════════════════════════════════════════
+  Switch between two themes.  The second theme is used if the first
+  is active, otherwise, the first theme is used
+[4mParameters[0m
+  [4mtheme1[0m   The name of the first theme
+  [4mtheme2[0m   The name of the second theme
+[4mSee Also[0m
+  [1m:config[0m, [1m:reset-config[0m
+[4mExample[0m
+#1 To toggle between the 'stand-dark' and 'stand-light' themes:
+   [37m[40m:[0m[1m[36m[40mtoggle-theme[0m[37m[40m stand-dark stand-light              [0m
+   
+
 
 [4m:[0m[1m[4mtoggle-view[0m[4m [0m[4mview-name[0m
 ══════════════════════════════════════════════════════════════════════

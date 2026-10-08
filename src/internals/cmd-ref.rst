@@ -375,7 +375,7 @@
       :config /ui/dim-text false
 
   **See Also**
-    :ref:`reset_config`
+    :ref:`reset_config`, :ref:`toggle_theme`
 
 ----
 
@@ -1668,7 +1668,7 @@
       :reset-config /ui/clock-format
 
   **See Also**
-    :ref:`config`
+    :ref:`config`, :ref:`toggle_theme`
 
 ----
 
@@ -2073,6 +2073,30 @@
 
   **See Also**
     :ref:`clear_all_sticky_headers`, :ref:`enable_word_wrap`, :ref:`hide_fields`, :ref:`hide_unmarked_lines`, :ref:`mark`, :ref:`next_mark`, :ref:`prev_mark`, :ref:`set_text_view_mode`
+
+----
+
+
+.. _toggle_theme:
+
+:toggle-theme *theme1* *theme2*
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  Switch between two themes.  The second theme is used if the first is active, otherwise, the first theme is used
+
+  **Parameters**
+    * **theme1\*** --- The name of the first theme
+    * **theme2\*** --- The name of the second theme
+
+  **Examples**
+    To toggle between the 'stand-dark' and 'stand-light' themes:
+
+    .. code-block::  lnav
+
+      :toggle-theme stand-dark stand-light
+
+  **See Also**
+    :ref:`config`, :ref:`reset_config`
 
 ----
 

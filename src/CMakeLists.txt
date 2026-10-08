@@ -196,7 +196,9 @@ set(CONFIG_FILES
         themes/monocai.json
         themes/night-owl.json
         themes/solarized-dark.json
-        themes/solarized-light.json)
+        themes/solarized-light.json
+        themes/stand-dark.json
+        themes/stand-light.json)
 
 set(CONFIG_FILE_PATHS ${CONFIG_FILES})
 

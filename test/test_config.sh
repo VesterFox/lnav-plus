@@ -65,3 +65,27 @@ run_cap_test ${lnav_test} -nN \
 
 run_cap_test ${lnav_test} -n -I ${test_dir} \
     hw://seattle/finn
+
+# toggle between two themes, starting from a theme that is not in the pair
+run_cap_test ${lnav_test} -nN \
+    -c ":toggle-theme stand-dark stand-light" \
+    -c ":config /ui/theme" \
+    -c ":toggle-theme stand-dark stand-light" \
+    -c ":config /ui/theme" \
+    -c ":toggle-theme stand-dark stand-light" \
+    -c ":config /ui/theme"
+
+# toggling to an unknown theme should fail
+run_cap_test ${lnav_test} -nN \
+    -c ":toggle-theme baddy stand-dark"
+
+# the failed toggle should not have changed the theme
+run_cap_test ${lnav_test} -nN \
+    -c ":config /ui/theme"
+
+# toggle-theme requires two theme names
+run_cap_test ${lnav_test} -nN \
+    -c ":toggle-theme stand-dark"
+
+run_cap_test ${lnav_test} -nN \
+    -c ":reset-config /ui/theme"

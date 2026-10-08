@@ -323,6 +323,9 @@ Display
      - Close the current text file or log file.
    * - :kbd:`F2`
      - Toggle mouse support.
+   * - :kbd:`F10`
+     - Toggle between the :code:`stand-dark` and :code:`stand-light` themes.
+       The selected theme is saved in the configuration.
    * - :kbd:`F5`
      - Reload the current view.  Re-runs the SQL query for the DB view
        or rebuilds the index for the TIMELINE view.

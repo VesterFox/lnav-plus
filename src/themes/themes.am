@@ -9,4 +9,6 @@ THEME_FILES = \
     $(srcdir)/%reldir%/night-owl.json \
     $(srcdir)/%reldir%/solarized-dark.json \
     $(srcdir)/%reldir%/solarized-light.json \
+    $(srcdir)/%reldir%/stand-dark.json \
+    $(srcdir)/%reldir%/stand-light.json \
     $()

@@ -1,0 +1,379 @@
+{
+    "$schema": "https://lnav.org/schemas/config-v1.schema.json",
+    "ui": {
+        "theme-defs": {
+            "stand-light": {
+                "vars": {
+                    "bg": "#EDE9DE",
+                    "side": "#E3DECF",
+                    "panel": "#F4F1E8",
+                    "soft": "#E8E3D5",
+                    "head": "#E6E0D0",
+                    "ink": "#33291D",
+                    "muted": "#72664F",
+                    "line": "#C4B79C",
+                    "card_line": "#5C4A32",
+                    "lit": "#F1D9CB",
+                    "dot": "#D3C8B0",
+                    "sel": "#B5C29A",
+                    "sel_ink": "#2A2316",
+                    "sel_muted": "#4E5236",
+                    "opt": "#8C8068",
+                    "accent": "#5E6B3A",
+                    "accent_ink": "#F4F1E8",
+                    "good": "#4A7240",
+                    "warn": "#9A5F24",
+                    "bad": "#A4483F",
+                    "semantic_highlight_color": "#5E6B3A",
+                    "yellow": "#9A5F24"
+                },
+                "styles": {
+                    "text": {
+                        "color": "${ink}",
+                        "background-color": "${bg}"
+                    },
+                    "selected-text": {
+                        "color": "${sel_ink}",
+                        "background-color": "${sel}"
+                    },
+                    "cursor-line": {
+                        "background-color": "${soft}"
+                    },
+                    "identifier": {
+                        "background-color": "",
+                        "color": "${semantic_highlight_color}"
+                    },
+                    "fuzzy-match": {
+                        "color": "${warn}",
+                        "underline": true,
+                        "bold": true
+                    },
+                    "alt-text": {
+                        "color": "${muted}",
+                        "bold": true
+                    },
+                    "ok": {
+                        "color": "${good}",
+                        "bold": true
+                    },
+                    "info": {
+                        "color": "${muted}",
+                        "bold": true
+                    },
+                    "error": {
+                        "color": "${bad}",
+                        "bold": true
+                    },
+                    "warning": {
+                        "color": "${warn}",
+                        "bold": true
+                    },
+                    "hidden": {
+                        "color": "${opt}",
+                        "bold": true
+                    },
+                    "disabled-cursor-line": {
+                        "color": "${muted}",
+                        "background-color": "${dot}"
+                    },
+                    "adjusted-time": {
+                        "color": "${bad}"
+                    },
+                    "skewed-time": {
+                        "color": "${warn}"
+                    },
+                    "offset-time": {
+                        "color": "${accent}"
+                    },
+                    "time-ago": {
+                        "bold": true
+                    },
+                    "time-column": {
+                        "background-color": "${side}"
+                    },
+                    "file-offset": {
+                        "color": "${muted}"
+                    },
+                    "invalid-msg": {
+                        "color": "${warn}"
+                    },
+                    "popup": {
+                        "color": "${ink}",
+                        "background-color": "${panel}"
+                    },
+                    "popup-border": {
+                        "color": "${card_line}"
+                    },
+                    "focused": {
+                        "color": "${accent_ink}",
+                        "background-color": "${accent}"
+                    },
+                    "disabled-focused": {
+                        "color": "${opt}",
+                        "background-color": "${soft}"
+                    },
+                    "scrollbar": {
+                        "color": "${ink}",
+                        "background-color": "${side}"
+                    },
+                    "h1": {
+                        "underline": true
+                    },
+                    "h2": {
+                        "underline": true
+                    },
+                    "h3": {
+                        "underline": true
+                    },
+                    "h4": {
+                        "underline": true
+                    },
+                    "h5": {
+                        "underline": true
+                    },
+                    "h6": {
+                        "underline": true
+                    },
+                    "hr": {
+                        "color": "${line}"
+                    },
+                    "hyperlink": {
+                        "underline": true
+                    },
+                    "list-glyph": {
+                        "color": "${accent}"
+                    },
+                    "breadcrumb": {
+                        "color": "${accent}",
+                        "bold": true
+                    },
+                    "table-border": {
+                        "color": "${line}"
+                    },
+                    "table-header": {
+                        "bold": true
+                    },
+                    "quote-border": {
+                        "color": "${card_line}",
+                        "background-color": "${soft}"
+                    },
+                    "quoted-text": {
+                        "background-color": "${soft}"
+                    },
+                    "footnote-border": {
+                        "color": "${accent}",
+                        "background-color": "${soft}"
+                    },
+                    "footnote-text": {
+                        "color": "${ink}",
+                        "background-color": "${soft}"
+                    },
+                    "snippet-border": {
+                        "color": "${accent}"
+                    },
+                    "indent-guide": {
+                        "color": "${line}"
+                    },
+                    "timeline-bar": {
+                        "background-color": "${accent}"
+                    },
+                    "context-line": {
+                        "bold": true
+                    }
+                },
+                "syntax-styles": {
+                    "inline-code": {
+                        "color": "${bad}"
+                    },
+                    "quoted-code": {
+                        "color": "${ink}"
+                    },
+                    "code-border": {
+                        "color": "${line}"
+                    },
+                    "object-key": {
+                        "color": "${semantic_highlight_color}"
+                    },
+                    "keyword": {
+                        "color": "${warn}"
+                    },
+                    "string": {
+                        "color": "${good}"
+                    },
+                    "comment": {
+                        "color": "${muted}"
+                    },
+                    "doc-directive": {
+                        "color": "${accent}"
+                    },
+                    "variable": {
+                        "color": "${accent}"
+                    },
+                    "symbol": {
+                        "color": "${accent}"
+                    },
+                    "null": {
+                        "color": "${muted}"
+                    },
+                    "ascii-control": {
+                        "color": "${good}"
+                    },
+                    "non-ascii": {
+                        "color": "${warn}"
+                    },
+                    "number": {
+                        "bold": true
+                    },
+                    "type": {
+                        "color": "${accent}"
+                    },
+                    "function": {
+                        "color": "${accent}"
+                    },
+                    "separators-references-accessors": {
+                        "color": "${muted}"
+                    },
+                    "re-special": {
+                        "color": "${accent}"
+                    },
+                    "re-repeat": {
+                        "color": "${warn}"
+                    },
+                    "diff-delete": {
+                        "color": "${bad}"
+                    },
+                    "diff-add": {
+                        "color": "${good}"
+                    },
+                    "diff-section": {
+                        "color": "${bad}"
+                    },
+                    "spectrogram-low": {
+                        "color": "${accent_ink}",
+                        "background-color": "${good}",
+                        "bold": true
+                    },
+                    "spectrogram-medium": {
+                        "color": "${accent_ink}",
+                        "background-color": "${warn}",
+                        "bold": true
+                    },
+                    "spectrogram-high": {
+                        "color": "${accent_ink}",
+                        "background-color": "${bad}",
+                        "bold": true
+                    },
+                    "file": {
+                        "color": "${accent}"
+                    }
+                },
+                "status-styles": {
+                    "title": {
+                        "color": "${accent_ink}",
+                        "background-color": "${accent}",
+                        "bold": true
+                    },
+                    "title-hotkey": {
+                        "color": "${lit}",
+                        "background-color": "${accent}",
+                        "underline": true
+                    },
+                    "alert-title": {
+                        "color": "${accent_ink}",
+                        "background-color": "${bad}",
+                        "bold": true
+                    },
+                    "disabled-title": {
+                        "color": "${opt}",
+                        "background-color": "${side}",
+                        "bold": true
+                    },
+                    "subtitle": {
+                        "color": "${ink}",
+                        "background-color": "${dot}"
+                    },
+                    "text": {
+                        "color": "${ink}",
+                        "background-color": "${head}"
+                    },
+                    "warn": {
+                        "color": "${warn}",
+                        "background-color": "${head}"
+                    },
+                    "alert": {
+                        "color": "${bad}",
+                        "background-color": "${head}"
+                    },
+                    "active": {
+                        "color": "${good}",
+                        "background-color": "${head}"
+                    },
+                    "info": {
+                        "color": "${muted}",
+                        "background-color": "${side}"
+                    },
+                    "inactive": {
+                        "color": "${muted}",
+                        "background-color": "${side}"
+                    },
+                    "inactive-warn": {
+                        "color": "${warn}",
+                        "background-color": "${side}"
+                    },
+                    "inactive-alert": {
+                        "color": "${bad}",
+                        "background-color": "${side}"
+                    },
+                    "hotkey": {
+                        "color": "${accent}",
+                        "underline": true,
+                        "bold": true
+                    },
+                    "suggestion": {
+                        "color": "${muted}"
+                    }
+                },
+                "log-level-styles": {
+                    "warning": {
+                        "color": "${warn}"
+                    },
+                    "error": {
+                        "color": "${bad}"
+                    },
+                    "critical": {
+                        "color": "${bad}"
+                    },
+                    "fatal": {
+                        "color": "${bad}"
+                    }
+                },
+                "highlights": {
+                    "colors": {
+                        "pattern": "(?:#[a-fA-F0-9]{6}|#[a-fA-F0-9]{3}\\b)",
+                        "style": {
+                            "color": "${semantic_highlight_color}"
+                        }
+                    },
+                    "ipv4": {
+                        "pattern": "\\b(?<!\\d\\.)\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b(?!\\.\\d)",
+                        "style": {
+                            "color": "${semantic_highlight_color}"
+                        }
+                    },
+                    "xml": {
+                        "pattern": "</?([^ >=!]+)[^>]*>",
+                        "style": {
+                            "color": "${semantic_highlight_color}"
+                        }
+                    },
+                    "xml-decl": {
+                        "pattern": "<!([^ >=!]+)[^>]*>",
+                        "style": {
+                            "color": "${semantic_highlight_color}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

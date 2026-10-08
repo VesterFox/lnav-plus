@@ -213,6 +213,10 @@ INSERT INTO lnav_user_notifications (id, priority, expiration, message)
 VALUES ('org.lnav.breadcrumb.focus', -1, DATETIME('now', '+2 minute'),
         'Press <span class="-lnav_status-styles_hotkey">${org.lnav.key.breadcrumb.focus}</span> to focus on the breadcrumb bar');
 
+INSERT INTO lnav_user_notifications (id, priority, expiration, message)
+VALUES ('org.lnav.theme.toggle', 0, DATETIME('now', '+30 second'),
+        'Press <span class="-lnav_status-styles_hotkey">${org.lnav.key.theme.toggle}</span> to switch between the dark and light themes');
+
 CREATE TABLE lnav_db.lnav_views_echo AS
 SELECT name, top, "left", height, inner_height, top_time, search, selection
 FROM lnav_views;

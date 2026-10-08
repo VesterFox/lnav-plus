@@ -105,8 +105,12 @@ The builtin themes are:
 `monocai <https://github.com/tstack/lnav/blob/master/src/themes/monocai.json>`_,
 `night-owl <https://github.com/tstack/lnav/blob/master/src/themes/night-owl.json>`_,
 `solarized-dark <https://github.com/tstack/lnav/blob/master/src/themes/solarized-dark.json>`_,
+`solarized-light <https://github.com/tstack/lnav/blob/master/src/themes/default-theme.json>`_,
+`stand-dark <https://github.com/VesterFox/lnav-plus/blob/master/src/themes/stand-dark.json>`_,
 and
-`solarized-light <https://github.com/tstack/lnav/blob/master/src/themes/default-theme.json>`_.
+`stand-light <https://github.com/VesterFox/lnav-plus/blob/master/src/themes/stand-light.json>`_.
+The :kbd:`F10` hotkey toggles between the :code:`stand-dark` and
+:code:`stand-light` themes.
 
 To create or customize a theme, consult the :ref:`themes` section.
 

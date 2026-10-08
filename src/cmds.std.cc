@@ -82,6 +82,7 @@
 #include "spectro_impls.hh"
 #include "sql_util.hh"
 #include "sqlite-extension-func.hh"
+#include "sqlitepp.client.hh"
 #include "url_loader.hh"
 #include "vtab_module.hh"
 #include "yajl/api/yajl_parse.h"
@@ -2977,6 +2978,42 @@ com_reset_config(exec_context& ec,
 }
 
 static Result<std::string, lnav::console::user_message>
+com_toggle_theme(exec_context& ec,
+                 std::string cmdline,
+                 std::vector<std::string>& args)
+{
+    if (args.size() != 3) {
+        return ec.make_error(
+            "expecting the names of the two themes to toggle between");
+    }
+
+    if (ec.ec_dry_run) {
+        return Ok(std::string());
+    }
+
+    const auto& next_theme
+        = lnav_config.lc_ui_theme == args[1] ? args[2] : args[1];
+    std::vector<std::string> config_args = {"config", "/ui/theme", next_theme};
+    auto config_res = com_config(
+        ec,
+        fmt::format(FMT_STRING("config /ui/theme {}"), next_theme),
+        config_args);
+    if (config_res.isErr()) {
+        return config_res;
+    }
+
+    auto clear_note = prepare_stmt(lnav_data.ld_db, R"(
+DELETE FROM lnav_user_notifications WHERE id = 'org.lnav.theme.toggle'
+)");
+    if (clear_note.isOk()) {
+        clear_note.unwrap().execute();
+    }
+
+    return Ok(
+        fmt::format(FMT_STRING("info: switched theme to {}"), next_theme));
+}
+
+static Result<std::string, lnav::console::user_message>
 com_spectrogram(exec_context& ec,
                 std::string cmdline,
                 std::vector<std::string>& args)
@@ -3891,6 +3928,19 @@ lnav::commands::command_t STD_COMMANDS[] = {
          .with_example({"To reset the '/ui/clock-format' option back to the "
                         "builtin default",
                         "/ui/clock-format"})
+         .with_tags({"configuration"})},
+    {"toggle-theme",
+     com_toggle_theme,
+
+     help_text(":toggle-theme")
+         .with_summary("Switch between two themes.  The second theme is "
+                       "used if the first is active, otherwise, the first "
+                       "theme is used")
+         .with_parameter(help_text("theme1", "The name of the first theme"))
+         .with_parameter(help_text("theme2", "The name of the second theme"))
+         .with_example({"To toggle between the 'stand-dark' and "
+                        "'stand-light' themes",
+                        "stand-dark stand-light"})
          .with_tags({"configuration"})},
     {
         "spectrogram",

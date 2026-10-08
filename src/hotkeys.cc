@@ -79,7 +79,9 @@ handle_keyseq(const char* keyseq)
     var_stack.push(std::map<std::string, scoped_value_t>());
     auto& vars = var_stack.top();
     vars["keyseq"] = string_fragment::from_c_str(keyseq);
-    const auto& kc = iter->second;
+    // XXX copy the command since executing it can reload the config, which
+    // replaces the active keymap and would leave a reference dangling
+    const auto kc = iter->second;
 
     log_debug(
         "executing key sequence %s: %s", keyseq, kc.kc_cmd.pp_value.c_str());
