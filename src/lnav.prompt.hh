@@ -156,6 +156,8 @@ struct prompt {
     std::string p_pre_history_content;
     bool p_replace_from_history{false};
     bool p_in_completion{false};
+    /** True while the completion popup is listing the names of commands. */
+    bool p_cmd_name_popup{false};
     int32_t p_history_changes{0};
 
     void focus_for(textview_curses& tc,
@@ -197,6 +199,11 @@ struct prompt {
     void rl_history_search(textinput_curses& tc);
     void rl_completion(textinput_curses& tc);
     void rl_popup_change(textinput_curses& tc);
+    /**
+     * Show the help for the command selected in the popup in a card next
+     * to the popup.
+     */
+    void show_cmd_card(textinput_curses& tc);
     void rl_popup_cancel(textinput_curses& tc);
     void rl_external_edit(textinput_curses& tc);
 };

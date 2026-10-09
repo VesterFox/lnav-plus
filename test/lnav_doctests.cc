@@ -44,6 +44,7 @@
 #include "doctest/doctest.h"
 #include "file_split.hh"
 #include "hasher.hh"
+#include "help_text_formatter.hh"
 #include "lnav_config.hh"
 #include "lnav_util.hh"
 #include "logfile.hh"
@@ -165,6 +166,72 @@ TEST_CASE("lnav::command::parse_for_prompt")
         auto arg = parse_res.arg_at(4);
         CHECK(arg.has_value());
         CHECK(arg->aar_element.se_value == "abc\\");
+    }
+}
+
+TEST_CASE("format_command_params_for_term")
+{
+    static const auto EXAMPLE_HELP
+        = help_text(":example")
+              .with_summary("An example command")
+              .with_parameter(help_text("first", "The first parameter"))
+              .with_parameter(help_text("--flag", "A flag").flag())
+              .with_parameter(help_text("second", "The second one").optional())
+              .with_parameter(help_text("rest", "The rest").one_or_more());
+    static const auto EXPECTED
+        = std::string("first [--flag] [second] rest1 [... restN]");
+
+    const auto focused_ranges = [](const attr_line_t& al) {
+        std::vector<line_range> retval;
+
+        for (const auto& attr : al.al_attrs) {
+            if (attr.sa_type == &VC_ROLE
+                && attr.sa_value.get<role_t>() == role_t::VCR_FOCUSED)
+            {
+                retval.emplace_back(attr.sa_range);
+            }
+        }
+        return retval;
+    };
+
+    {
+        attr_line_t al;
+
+        format_command_params_for_term(EXAMPLE_HELP, al);
+        CHECK(al.get_string() == EXPECTED);
+        CHECK(focused_ranges(al).empty());
+    }
+    {
+        // The parameter being entered is the only one that is marked and
+        // the mark covers the suffix of a repeated parameter.
+        attr_line_t al;
+
+        format_command_params_for_term(
+            EXAMPLE_HELP, al, &EXAMPLE_HELP.ht_parameters[3]);
+        CHECK(al.get_string() == EXPECTED);
+
+        const auto ranges = focused_ranges(al);
+        REQUIRE(ranges.size() == 1);
+        CHECK(al.get_substring(ranges[0]) == "rest1");
+    }
+    {
+        // The brackets of an optional parameter are not part of the mark.
+        attr_line_t al;
+
+        format_command_params_for_term(
+            EXAMPLE_HELP, al, &EXAMPLE_HELP.ht_parameters[2]);
+
+        const auto ranges = focused_ranges(al);
+        REQUIRE(ranges.size() == 1);
+        CHECK(al.get_substring(ranges[0]) == "second");
+    }
+    {
+        // The synopsis of a command is built from the same parameters.
+        attr_line_t al;
+
+        format_help_text_for_term(
+            EXAMPLE_HELP, 70, al, help_text_content::synopsis);
+        CHECK(al.get_string() == ":example " + EXPECTED);
     }
 }
 

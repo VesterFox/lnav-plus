@@ -310,6 +310,15 @@ public:
 
     bool do_update() override;
 
+    /** Size and place the popup, its frame, and its info block. */
+    void layout_popup();
+
+    /** @return The width of the list in the popup, without its frame. */
+    int get_popup_list_width() const;
+
+    /** Draw the frame and info block of the popup. */
+    void draw_popup_overlay();
+
     void open_popup_for_completion(line_range crange,
                                    std::vector<attr_line_t> possibilities);
 
@@ -321,6 +330,51 @@ public:
     }
 
     void open_popup_for_history(std::vector<attr_line_t> possibilities);
+
+    /** Where the block of text that accompanies the popup is shown. */
+    enum class popup_info_layout_t {
+        none,
+        /**
+         * To the right of the completion popup, to describe the selected
+         * item.  The block is only shown while the popup is open.
+         */
+        side,
+        /**
+         * Above the completion popup, to describe what is being entered.
+         * The block is shown on its own when the popup is closed.
+         */
+        above,
+    };
+
+    /**
+     * Show a block of read-only text next to the popup.  The block is
+     * cleared when the content changes, so it should be set from the
+     * tc_on_change handler.
+     *
+     * @param layout Where to show the block.
+     * @param lines The content of the block.
+     * @param left For the "above" layout, the column in the input that the
+     *   block should line up with.
+     */
+    void set_popup_info(popup_info_layout_t layout,
+                        std::vector<attr_line_t> lines,
+                        int left = 0);
+
+    void clear_popup_info();
+
+    /**
+     * @return The width available for the text in a "side" block next to
+     *   the open completion popup or zero if there is no room for it.
+     */
+    int get_side_info_width() const;
+
+    /** @return True if a popup or info block is drawn over other views. */
+    bool has_popup_overlay() const
+    {
+        return this->tc_popup.is_visible()
+            || (this->tc_popup_info_layout == popup_info_layout_t::above
+                && !this->tc_popup_info.empty());
+    }
 
     void apply_highlights();
 
@@ -453,6 +507,17 @@ public:
 
     ncplane* tc_window{nullptr};
     size_t tc_max_popup_height{5};
+    /**
+     * The number of rows to leave between the input and the popup, for
+     * content next to the input that should stay visible.
+     */
+    int tc_popup_margin{0};
+    /**
+     * Extra rows to leave under an info block that is shown on its own.
+     * The block stays up while typing, so it should not cover content
+     * that the popup is allowed to cover for a moment.
+     */
+    int tc_popup_info_margin{0};
     int tc_left{0};
     int tc_top{0};
     int tc_height{0};
@@ -505,6 +570,46 @@ public:
 
     popup_type_t tc_popup_type{popup_type_t::none};
 
+    /** The outline of a part of the popup, in window coordinates. */
+    struct popup_frame_t {
+        int pf_x{0};
+        int pf_y{0};
+        int pf_width{0};
+        int pf_height{0};
+
+        bool empty() const
+        {
+            return this->pf_width <= 0 || this->pf_height <= 0;
+        }
+
+        bool contains(int x, int y) const
+        {
+            return this->pf_x <= x && x < this->pf_x + this->pf_width
+                && this->pf_y <= y && y < this->pf_y + this->pf_height;
+        }
+    };
+
+    /** The most rows shown by a popup that has a "side" info block. */
+    static constexpr int MAX_SIDE_INFO_ROWS = 10;
+    /** The most rows shown by a popup under an "above" info block. */
+    static constexpr int MAX_ABOVE_INFO_LIST_ROWS = 8;
+    static constexpr int MIN_SIDE_INFO_WIDTH = 30;
+    static constexpr int MAX_SIDE_INFO_WIDTH = 70;
+
+    std::vector<attr_line_t> tc_popup_info;
+    popup_info_layout_t tc_popup_info_layout{popup_info_layout_t::none};
+    int tc_popup_info_left{0};
+    /** The column in the input of the text being completed. */
+    int tc_popup_left{0};
+    /** The width of the widest item in the popup. */
+    int tc_popup_content_width{0};
+    /** True if the popup opened above the input, with the items reversed. */
+    bool tc_popup_above{true};
+    popup_frame_t tc_popup_frame;
+    popup_frame_t tc_popup_info_frame;
+    /** Takes the mouse events for the parts of the popup that are inert. */
+    view_curses tc_popup_shield;
+
     std::optional<ui_clock::time_point> tc_last_tick_after_input;
     bool tc_timeout_fired{false};
     bool tc_in_popup_change{false};
@@ -515,6 +620,8 @@ public:
     std::function<void(textinput_curses&)> tc_on_blur;
     std::function<void(textinput_curses&)> tc_on_abort;
     std::function<void(textinput_curses&)> tc_on_change;
+    /** Called when the cursor is moved without changing the content. */
+    std::function<void(textinput_curses&)> tc_on_cursor_move;
     std::function<void(textinput_curses&)> tc_on_popup_change;
     std::function<void(textinput_curses&)> tc_on_popup_cancel;
     std::function<void(textinput_curses&)> tc_on_completion_request;

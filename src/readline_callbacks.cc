@@ -178,6 +178,219 @@ format_sql_example(const char* sql_example_fmt)
     return retval;
 }
 
+/**
+ * @return The names of the commands that match what has been typed, with the
+ *   best match first.  Commands that start with the pattern come before the
+ *   ones that contain it, which come before the fuzzy matches.
+ */
+static std::vector<string_fragment>
+rank_commands(const std::string& pattern)
+{
+    static constexpr size_t MAX_OTHER_MATCHES = 10;
+
+    std::vector<string_fragment> retval;
+    std::vector<string_fragment> containing;
+
+    if (pattern.empty()) {
+        return retval;
+    }
+
+    for (const auto& cmd_pair : lnav_commands) {
+        const auto pos = cmd_pair.first.to_string().find(pattern);
+
+        if (pos == 0) {
+            retval.emplace_back(cmd_pair.first);
+        } else if (pos != std::string::npos) {
+            containing.emplace_back(cmd_pair.first);
+        }
+    }
+
+    // The map is in alphabetical order, so names of the same length stay
+    // sorted by name.
+    static const auto by_length
+        = [](const string_fragment& lhs, const string_fragment& rhs) {
+              return lhs.length() < rhs.length();
+          };
+    std::stable_sort(retval.begin(), retval.end(), by_length);
+    std::stable_sort(containing.begin(), containing.end(), by_length);
+
+    const auto prefix_count = retval.size();
+    const auto add_other = [&](const string_fragment& name) {
+        if (retval.size() - prefix_count < MAX_OTHER_MATCHES
+            && std::find(retval.begin(), retval.end(), name) == retval.end())
+        {
+            retval.emplace_back(name);
+        }
+    };
+
+    for (const auto& name : containing) {
+        add_other(name);
+    }
+    for (const auto& name : lnav_commands | lnav::itertools::first()
+             | lnav::itertools::similar_to(pattern, MAX_OTHER_MATCHES))
+    {
+        add_other(name);
+    }
+
+    return retval;
+}
+
+/**
+ * Show a block above the command prompt with the synopsis of the command
+ * being entered and a description of the parameter under the cursor.  The
+ * block takes the place of the help panel, which is far from the input and
+ * does not track the cursor.
+ */
+static void
+rl_cmd_hint(textinput_curses& rc)
+{
+    using layout_t = textinput_curses::popup_info_layout_t;
+
+    static const auto INTRO = [] {
+        std::vector<attr_line_t> retval;
+
+        for (auto& al : attr_line_t::from_ansi_str(CMD_HELP).split_lines()) {
+            if (startswith(al.al_string, " ")) {
+                al.erase(0, 1);
+            }
+            retval.emplace_back(al);
+        }
+        for (auto& al : attr_line_t::from_ansi_str(CMD_EXAMPLE).split_lines())
+        {
+            retval.emplace_back(al);
+        }
+
+        return retval;
+    }();
+
+    if (rc.tc_lines.size() != 1) {
+        rc.clear_popup_info();
+        return;
+    }
+
+    const auto line = rc.get_content();
+    std::vector<std::string> args;
+
+    split_ws(line, args);
+    if (args.empty()) {
+        rc.set_popup_info(layout_t::above, INTRO);
+        return;
+    }
+
+    const auto iter = lnav_commands.find(args[0]);
+    if (iter == lnav_commands.end()
+        || (args.size() == 1 && !endswith(line, " ")))
+    {
+        // The command is still being picked, the popup describes the
+        // candidates.
+        if (rc.tc_popup_info_layout == layout_t::above) {
+            rc.clear_popup_info();
+        }
+        return;
+    }
+
+    const auto& ht = iter->second->c_help;
+    if (ht.ht_name == nullptr) {
+        rc.clear_popup_info();
+        return;
+    }
+
+    const auto line_sf = string_fragment::from_str(line);
+    const auto args_sf = line_sf.split_when(string_fragment::tag1{' '}).second;
+    const help_text* current = nullptr;
+
+    if (rc.tc_cursor.x >= args_sf.sf_begin) {
+        const auto parsed_cmd = lnav::command::parse_for_prompt(
+            lnav_data.ld_exec_context, args_sf, ht);
+        const auto x
+            = args_sf.column_to_byte_index(rc.tc_cursor.x - args_sf.sf_begin);
+        const auto arg_res_opt = parsed_cmd.arg_at(x);
+
+        // A flag is reported with the help for the command itself.
+        if (arg_res_opt && arg_res_opt->aar_help != &ht) {
+            current = arg_res_opt->aar_help;
+        }
+    }
+
+    const auto dim = rc.get_visible_dimensions();
+    const auto text_width = std::clamp(dim.dr_width - 4, 20, 70);
+    std::vector<attr_line_t> lines;
+    text_wrap_settings tws;
+
+    {
+        attr_line_t synopsis;
+
+        synopsis.append(":").append(lnav::roles::symbol(ht.ht_name));
+        synopsis.al_attrs.emplace_back(
+            line_range{0, (int) synopsis.al_string.length()},
+            VC_STYLE.value(text_attrs::with_bold()));
+        if (!ht.ht_parameters.empty()) {
+            synopsis.append(" ");
+            format_command_params_for_term(ht, synopsis, current);
+        }
+        lines.emplace_back(synopsis);
+    }
+
+    if (current != nullptr) {
+        const auto indent = strlen(current->ht_name) + 3;
+        auto summary = attr_line_t::from_ansi_str(
+            current->ht_summary != nullptr ? current->ht_summary : "");
+
+        tws.with_indent(0).with_width(
+            std::max(10, text_width - (int) indent));
+        summary.wrap_with(&tws);
+
+        auto summary_lines = summary.split_lines();
+        if (summary_lines.empty()) {
+            summary_lines.emplace_back();
+        }
+        for (const auto& summary_line : summary_lines) {
+            attr_line_t al;
+
+            if (&summary_line == &summary_lines.front()) {
+                al.append(lnav::roles::variable(current->ht_name))
+                    .append("   ");
+            } else {
+                al.append(indent, ' ');
+            }
+            lines.emplace_back(al.append(summary_line));
+        }
+        if (!current->ht_enum_values.empty() && !rc.tc_popup.is_visible()) {
+            // The popup is not listing the values, so put them here.
+            attr_line_t al;
+
+            al.append(indent, ' ').append("Values"_h5).append(": ");
+
+            const auto values_indent = al.column_width();
+            auto first_on_line = true;
+            for (const auto& ename : current->ht_enum_values) {
+                if (!first_on_line) {
+                    al.append("|");
+                    if ((int) (al.column_width() + ename.length())
+                        > text_width)
+                    {
+                        lines.emplace_back(al);
+                        al.clear().append(values_indent, ' ');
+                    }
+                }
+                al.append(lnav::roles::symbol(ename));
+                first_on_line = false;
+            }
+            lines.emplace_back(al);
+        }
+    } else {
+        auto summary = attr_line_t::from_ansi_str(ht.ht_summary);
+
+        tws.with_indent(0).with_width(text_width);
+        summary.wrap_with(&tws);
+        for (const auto& summary_line : summary.split_lines()) {
+            lines.emplace_back(summary_line);
+        }
+    }
+
+    rc.set_popup_info(layout_t::above, lines, args_sf.sf_begin);
+}
+
 void
 rl_set_help()
 {
@@ -194,8 +407,10 @@ rl_set_help()
             break;
         }
         case ln_mode_t::COMMAND: {
-            lnav_data.ld_doc_source.replace_with(CMD_HELP);
-            lnav_data.ld_example_source.replace_with(CMD_EXAMPLE);
+            // The help for commands is shown next to the input.
+            lnav_data.ld_doc_source.clear();
+            lnav_data.ld_example_source.clear();
+            rl_cmd_hint(lnav::prompt::get().p_editor);
             break;
         }
         default:
@@ -203,12 +418,28 @@ rl_set_help()
     }
 }
 
+/**
+ * @param sql_start The offset of the SQL in the content of the prompt, for
+ *   commands that take SQL as an argument.
+ */
 static bool
-rl_sql_help(textinput_curses& rc)
+rl_sql_help(textinput_curses& rc, size_t sql_start = 0)
 {
-    auto al = attr_line_t(rc.get_content());
-    const auto& sa = al.get_attrs();
+    auto content = rc.get_content();
     auto x = rc.get_cursor_offset();
+
+    if (sql_start > 0) {
+        // The name of the command is not SQL, "filter" would be taken for
+        // the keyword otherwise.
+        if (sql_start > content.size() || x < (ssize_t) sql_start) {
+            return false;
+        }
+        content.erase(0, sql_start);
+        x -= (int) sql_start;
+    }
+
+    auto al = attr_line_t(content);
+    const auto& sa = al.get_attrs();
     bool has_doc = false;
 
     if (x > 0) {
@@ -325,6 +556,10 @@ rl_cmd_change(textinput_curses& rc, bool is_req)
     const auto line = rc.get_content();
     std::vector<std::string> args;
     auto iter = lnav_commands.end();
+    // True if the help panel is being used for the SQL in an argument.
+    auto has_sql_doc = false;
+
+    prompt.p_cmd_name_popup = false;
 
     split_ws(line, args);
 
@@ -368,30 +603,52 @@ rl_cmd_change(textinput_curses& rc, bool is_req)
     if (iter == lnav_commands.end()
         || (args.size() == 1 && !endswith(line, " ") && !endswith(line, "\n")))
     {
-        auto poss_str = lnav_commands | lnav::itertools::first()
-            | lnav::itertools::similar_to(args.empty() ? "" : args[0], 10);
-        auto poss_width = poss_str
+        // The summary and the rest of the help for the selected command
+        // are shown in the card next to the list, so the list only needs
+        // enough to tell the commands apart.
+        static constexpr size_t MAX_PARAMS_WIDTH = 14;
+
+        const auto pattern = cget(args, 0).value_or("");
+        const auto poss_str = rank_commands(pattern);
+        const auto poss_width = poss_str
             | lnav::itertools::map(&string_fragment::length)
             | lnav::itertools::max();
 
         auto poss = poss_str
-            | lnav::itertools::map([&args, &poss_width](const auto& x) {
-                        return attr_line_t()
-                            .append(x, VC_ROLE.value(role_t::VCR_KEYWORD))
-                            .highlight_fuzzy_matches(cget(args, 0).value_or(""))
-                            .append(" ")
-                            .pad_to(poss_width.value_or(0) + 1)
-                            .append(lnav_commands[x]->c_help.ht_summary)
-                            .with_attr_for_all(lnav::prompt::SUBST_TEXT.value(
+            | lnav::itertools::map([&pattern, &poss_width](const auto& x) {
+                        const auto& ht = lnav_commands[x]->c_help;
+                        auto retval = attr_line_t()
+                                          .append(x,
+                                                  VC_ROLE.value(
+                                                      role_t::VCR_KEYWORD))
+                                          .highlight_fuzzy_matches(pattern);
+                        attr_line_t params;
+
+                        if (ht.ht_name != nullptr) {
+                            format_command_params_for_term(ht, params);
+                        }
+                        if (params.column_width() > MAX_PARAMS_WIDTH) {
+                            params.erase(params.column_to_byte_index(
+                                MAX_PARAMS_WIDTH - 1));
+                            params.append("\u22ef");
+                        }
+                        if (!params.empty()) {
+                            retval.pad_to(poss_width.value_or(0) + 2)
+                                .append(params);
+                        }
+                        return retval.with_attr_for_all(
+                            lnav::prompt::SUBST_TEXT.value(
                                 fmt::format(FMT_STRING("{} "), x)));
                     });
 
         rc.open_popup_for_completion(0, poss);
         rc.tc_popup.set_title("Command");
+        if (rc.tc_popup.is_visible()) {
+            prompt.p_cmd_name_popup = true;
+            prompt.show_cmd_card(rc);
+        }
         prompt.p_editor.tc_height = std::min(
             prompt.p_editor.tc_height, (int) prompt.p_editor.tc_lines.size());
-        lnav_data.ld_doc_source.replace_with(CMD_HELP);
-        lnav_data.ld_example_source.replace_with(CMD_EXAMPLE);
         lnav_data.ld_bottom_source.set_prompt(LNAV_CMD_PROMPT);
         lnav_data.ld_bottom_source.grep_error("");
         lnav_data.ld_status[LNS_BOTTOM].set_needs_update();
@@ -417,29 +674,10 @@ rl_cmd_change(textinput_curses& rc, bool is_req)
         }
         lnav_data.ld_status[LNS_BOTTOM].set_needs_update();
     } else if ((args[0] != "filter-expr" && args[0] != "mark-expr")
-               || !rl_sql_help(rc))
+               || !(has_sql_doc = rl_sql_help(rc, line.find(' ') + 1)))
     {
         const auto& cmd = *iter->second;
         const auto& ht = cmd.c_help;
-
-        if (ht.ht_name) {
-            auto& dtc = lnav_data.ld_doc_view;
-            auto& etc = lnav_data.ld_example_view;
-            unsigned long width;
-            vis_line_t height;
-            attr_line_t al;
-
-            dtc.get_dimensions(height, width);
-            format_help_text_for_term(ht, std::min(70UL, width), al);
-            lnav_data.ld_doc_source.replace_with(al);
-            dtc.set_needs_update();
-
-            al.clear();
-            etc.get_dimensions(height, width);
-            format_example_text_for_term(ht, eval_example, width, al);
-            lnav_data.ld_example_source.replace_with(al);
-            etc.set_needs_update();
-        }
 
         if (cmd.c_prompt != nullptr) {
             const auto prompt_res
@@ -550,6 +788,15 @@ rl_cmd_change(textinput_curses& rc, bool is_req)
         } else {
             log_info("no arg at %zu", x);
         }
+    }
+
+    if (!prompt.p_cmd_name_popup) {
+        rl_cmd_hint(rc);
+    }
+    if (!has_sql_doc) {
+        // The help for the command is in the popup and the hint block.
+        lnav_data.ld_doc_source.clear();
+        lnav_data.ld_example_source.clear();
     }
 }
 
@@ -1036,6 +1283,7 @@ rl_change(textinput_curses& rc)
     rc.tc_suggestion.clear();
     tc->clear_preview();
     lnav_data.ld_user_message_source.clear();
+    prompt.p_cmd_name_popup = false;
 
     log_debug("rl_change");
 
@@ -1104,6 +1352,15 @@ rl_search_internal(textinput_curses& rc, ln_mode_t mode, bool complete = false)
             break;
 
         case ln_mode_t::COMMAND: {
+            if (prompt.p_cmd_name_popup) {
+                // A command is still being picked from the popup, so there
+                // is nothing to try out yet.
+                lnav_data.ld_bottom_source.set_prompt(LNAV_CMD_PROMPT);
+                lnav_data.ld_bottom_source.grep_error("");
+                lnav_data.ld_status[LNS_BOTTOM].set_needs_update();
+                return;
+            }
+
             auto& ec = lnav_data.ld_exec_context;
             ec.ec_dry_run = true;
 
@@ -1771,6 +2028,17 @@ rl_completion_request(textinput_curses& rc)
 
         default:
             break;
+    }
+}
+
+void
+rl_cursor_move(textinput_curses& rc)
+{
+    if (lnav_data.ld_mode == ln_mode_t::COMMAND
+        && rc.tc_mode == textinput_curses::mode_t::editing
+        && rc.tc_popup_type != textinput_curses::popup_type_t::history)
+    {
+        rl_cmd_hint(rc);
     }
 }
 

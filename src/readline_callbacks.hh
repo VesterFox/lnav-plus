@@ -35,6 +35,7 @@
 
 void rl_set_help();
 void rl_change(textinput_curses& ti);
+void rl_cursor_move(textinput_curses& ti);
 void rl_search(textinput_curses& ti);
 void lnav_rl_abort(textinput_curses& ti);
 void rl_callback(textinput_curses& ti);

@@ -102,6 +102,65 @@ add_enum_param(attr_line_t& out, const help_text& enum_param)
 }
 
 void
+format_command_params_for_term(const help_text& ht,
+                               attr_line_t& out,
+                               const help_text* current)
+{
+    auto first = true;
+
+    for (const auto& param : ht.ht_parameters) {
+        const auto is_current = &param == current;
+
+        if (!first) {
+            out.append(" ");
+        }
+        first = false;
+        if (param.ht_nargs == help_nargs_t::HN_OPTIONAL) {
+            out.append("[");
+        }
+
+        const auto name_start = (int) out.al_string.length();
+        if (is_current) {
+            // The variable role is left off since its color would be laid
+            // over the background of the focused role.
+            out.append(param.ht_name);
+        } else {
+            out.append(lnav::roles::variable(param.ht_name));
+        }
+        if (param.ht_nargs == help_nargs_t::HN_OPTIONAL) {
+            out.append("]");
+        }
+        if (param.ht_nargs == help_nargs_t::HN_ONE_OR_MORE) {
+            if (is_current) {
+                out.append("1");
+            } else {
+                out.append("1"_variable);
+            }
+        }
+        if (is_current) {
+            auto name_end = (int) out.al_string.length();
+            if (param.ht_nargs == help_nargs_t::HN_OPTIONAL) {
+                // Leave the closing bracket out.
+                name_end -= 1;
+            }
+
+            const auto lr = line_range{name_start, name_end};
+            out.al_attrs.emplace_back(lr, VC_ROLE.value(role_t::VCR_FOCUSED));
+            out.al_attrs.emplace_back(
+                lr, VC_STYLE.value(text_attrs::with_bold()));
+        }
+        if (param.ht_nargs == help_nargs_t::HN_ONE_OR_MORE) {
+            out.append(" [");
+            out.append("..."_variable);
+            out.append(" ");
+            out.append(lnav::roles::variable(param.ht_name));
+            out.append("N"_variable);
+            out.append("]");
+        }
+    }
+}
+
+void
 format_help_text_for_term(const help_text& ht,
                           size_t width,
                           attr_line_t& out,
@@ -112,6 +171,8 @@ format_help_text_for_term(const help_text& ht,
     attr_line_builder alb(out);
     text_wrap_settings tws;
     size_t start_index = out.get_string().length();
+    const auto with_details = htc == help_text_content::full
+        || htc == help_text_content::details;
 
     tws.with_width(width);
 
@@ -120,24 +181,9 @@ format_help_text_for_term(const help_text& ht,
             auto line_start = out.al_string.length();
 
             out.append(":").append(lnav::roles::symbol(ht.ht_name));
-            for (const auto& param : ht.ht_parameters) {
+            if (!ht.ht_parameters.empty()) {
                 out.append(" ");
-                if (param.ht_nargs == help_nargs_t::HN_OPTIONAL) {
-                    out.append("[");
-                }
-                out.append(lnav::roles::variable(param.ht_name));
-                if (param.ht_nargs == help_nargs_t::HN_OPTIONAL) {
-                    out.append("]");
-                }
-                if (param.ht_nargs == help_nargs_t::HN_ONE_OR_MORE) {
-                    out.append("1"_variable);
-                    out.append(" [");
-                    out.append("..."_variable);
-                    out.append(" ");
-                    out.append(lnav::roles::variable(param.ht_name));
-                    out.append("N"_variable);
-                    out.append("]");
-                }
+                format_command_params_for_term(ht, out);
             }
             out.with_attr(string_attr{
                 line_range{(int) line_start, (int) out.get_string().length()},
@@ -493,7 +539,7 @@ format_help_text_for_term(const help_text& ht,
             break;
     }
 
-    if (htc == help_text_content::full && !ht.ht_parameters.empty()) {
+    if (with_details && !ht.ht_parameters.empty()) {
         size_t max_param_name_width = 0;
 
         for (const auto& param : ht.ht_parameters) {
@@ -545,7 +591,7 @@ format_help_text_for_term(const help_text& ht,
             }
         }
     }
-    if (htc == help_text_content::full && !ht.ht_results.empty()) {
+    if (with_details && !ht.ht_results.empty()) {
         size_t max_result_name_width = 0;
 
         for (const auto& result : ht.ht_results) {

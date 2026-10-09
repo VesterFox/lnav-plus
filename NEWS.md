@@ -192,6 +192,23 @@ Interface Changes:
 * Pressing `G` will now cycle through putting the
   end of the content at the top and bottom of the
   screen in cursor mode.
+* The command prompt now shows its help next to the
+  input instead of in the panel above the status bar:
+  - While the name of a command is being typed, the
+    completion popup lists the matching commands
+    along with their parameters, and a card next to
+    the list shows the help for the selected command.
+    Commands that start with what was typed are
+    listed first.  Pressing `ENTER` when a command
+    that does not require arguments has been typed
+    in full runs it.
+  - After the name, a block above the prompt shows
+    the synopsis of the command with the parameter
+    under the cursor highlighted and described.
+* The completion popups of the prompts now have a
+  full frame, use the `focused` theme style for the
+  selected item, and no longer cover the bottom
+  status line.
 
 Performance:
 * Indexing performance has been improved in a few

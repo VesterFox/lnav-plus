@@ -11,11 +11,13 @@ Commands provide access to some of the more advanced features in **lnav**, like
 :ref:`filtering<filtering>` and
 :ref:`"search tables"<search_tables>`.  You can activate the command
 prompt by pressing the :kbd:`:` key.  At the prompt, you can start typing
-in the desired command and/or double-tap :kbd:`TAB` to activate
-auto-completion and show the available commands.  To guide you in the usage of
-the commands, a help window will appear above the command prompt with an
-explanation of the command and its parameters (if it has any).  For example,
-the screenshot below shows the help for the :code:`:open` command:
+in the desired command.  A popup will list the commands that match what you
+have typed, along with their parameters, and a card next to the list will show
+the help for the selected command.  Use the arrow keys to move through the
+list and press :kbd:`TAB` to complete the selected command.  After the name of
+the command, a block above the prompt shows the synopsis of the command with a
+description of the parameter under the cursor.  For example, the screenshot
+below shows the help for the :code:`:open` command:
 
 .. figure:: open-help.png
    :align: center

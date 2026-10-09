@@ -27,6 +27,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <unordered_set>
@@ -46,6 +47,7 @@
 #include "db_sub_source.hh"
 #include "external_editor.hh"
 #include "fmt/ranges.h"
+#include "help_text_formatter.hh"
 #include "base/itertools.similar.hh"
 #include "lnav.hh"
 #include "lnav_config.hh"
@@ -65,6 +67,7 @@
 #include "sql_util.hh"
 #include "sqlitepp.client.hh"
 #include "tailer/tailer.looper.hh"
+#include "view_helpers.examples.hh"
 #include "yajlpp/yajlpp_def.hh"
 
 using namespace lnav::roles::literals;
@@ -306,6 +309,7 @@ prompt::focus_for(textview_curses& tc,
     editor.tc_suggestion.clear();
     this->p_remote_paths.clear();
     this->p_current_context = context;
+    this->p_cmd_name_popup = false;
     switch (context) {
         case context_t::script: {
             this->p_scripts = find_format_scripts(lnav_data.ld_config_paths);
@@ -542,11 +546,38 @@ prompt::rl_completion(textinput_curses& tc)
         return;
     }
 
-    this->p_in_completion = true;
     const auto& al
         = tc.tc_popup_source.get_lines()[tc.tc_popup.get_selection().value()]
               .tl_value;
     auto sub = get_string_attr(al.al_attrs, SUBST_TEXT)->get();
+    if (this->p_cmd_name_popup
+        && tc.tc_popup_type == textinput_curses::popup_type_t::completion
+        && trim(sub) == tc.get_content())
+    {
+        // Enter was pressed (tab resets the popup type before getting
+        // here) with the selection on the command that is already in the
+        // prompt.  If the command can be run as it is, there is nothing
+        // to complete, so run it as would happen if the popup had closed
+        // on the exact match.  Otherwise, fall through to add the space
+        // so the arguments can be entered.
+        const auto cmd_iter = lnav_commands.find(tc.get_content());
+        const auto needs_args = cmd_iter != lnav_commands.end()
+            && std::any_of(cmd_iter->second->c_help.ht_parameters.begin(),
+                           cmd_iter->second->c_help.ht_parameters.end(),
+                           [](const help_text& param) {
+                               return param.ht_nargs
+                                       == help_nargs_t::HN_REQUIRED
+                                   || param.ht_nargs
+                                       == help_nargs_t::HN_ONE_OR_MORE;
+                           });
+        if (!needs_args) {
+            tc.blur();
+            tc.tc_on_perform(tc);
+            return;
+        }
+    }
+
+    this->p_in_completion = true;
     tc.tc_selection = tc.tc_complete_range;
     tc.replace_selection(sub);
     if (tc.tc_lines.size() > 1 && tc.tc_height == 1) {
@@ -561,8 +592,52 @@ prompt::rl_popup_cancel(textinput_curses& tc)
 }
 
 void
+prompt::show_cmd_card(textinput_curses& tc)
+{
+    const auto width = tc.get_side_info_width();
+    const auto sel = tc.tc_popup.get_selection();
+
+    if (width == 0 || !sel) {
+        tc.clear_popup_info();
+        return;
+    }
+
+    const auto& al = tc.tc_popup_source.get_lines()[sel.value()].tl_value;
+    const auto sub = get_string_attr(al.al_attrs, SUBST_TEXT);
+    const auto iter = sub ? lnav_commands.find(trim(sub->get()))
+                          : lnav_commands.end();
+
+    if (iter == lnav_commands.end() || iter->second->c_help.ht_name == nullptr)
+    {
+        tc.clear_popup_info();
+        return;
+    }
+
+    const auto& ht = iter->second->c_help;
+    attr_line_t card;
+
+    // The related commands are left out to leave room for the examples,
+    // the list next to the card already shows the commands with similar
+    // names.
+    format_help_text_for_term(ht, width, card, help_text_content::details);
+    format_example_text_for_term(ht, eval_example, width, card);
+
+    auto lines = card.split_lines();
+    while (!lines.empty() && lines.back().blank()) {
+        lines.pop_back();
+    }
+    tc.set_popup_info(textinput_curses::popup_info_layout_t::side, lines);
+}
+
+void
 prompt::rl_popup_change(textinput_curses& tc)
 {
+    if (tc.tc_popup_type == textinput_curses::popup_type_t::completion
+        && this->p_cmd_name_popup)
+    {
+        this->show_cmd_card(tc);
+        return;
+    }
     if (tc.tc_popup_type != textinput_curses::popup_type_t::history) {
         return;
     }

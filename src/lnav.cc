@@ -1535,12 +1535,16 @@ VALUES ('org.lnav.mouse-support', -1, DATETIME('now', '+1 minute'),
         prompt.p_editor.set_title("main prompt");
         prompt.p_editor.tc_window = lnav_data.ld_window;
         prompt.p_editor.tc_height = 1;
+        // The bottom status line is right above the prompt and shows the
+        // result of trying out what has been typed.
+        prompt.p_editor.tc_popup_margin = 1;
         prompt.p_editor.tc_text_format = text_format_t::TF_LNAV_SCRIPT;
         prompt.p_editor.tc_on_help = bind_mem(&lnav::prompt::rl_help, &prompt);
         prompt.p_editor.tc_on_reformat
             = bind_mem(&lnav::prompt::rl_reformat, &prompt);
         prompt.p_editor.tc_on_focus = rl_focus;
         prompt.p_editor.tc_on_change = rl_change;
+        prompt.p_editor.tc_on_cursor_move = rl_cursor_move;
         prompt.p_editor.tc_on_popup_change
             = bind_mem(&lnav::prompt::rl_popup_change, &prompt);
         prompt.p_editor.tc_on_popup_cancel
@@ -2329,6 +2333,11 @@ VALUES ('org.lnav.mouse-support', -1, DATETIME('now', '+1 minute'),
                 break;
             default:
                 break;
+        }
+        if (!updated_views.empty() && prompt.p_editor.has_popup_overlay()) {
+            // The popup of the prompt is drawn over the views that were
+            // just updated, so it needs to be drawn again.
+            prompt.p_editor.set_needs_update();
         }
         if (prompt.p_editor.do_update()) {
             updated_views.emplace_back(&prompt.p_editor);

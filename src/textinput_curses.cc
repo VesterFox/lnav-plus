@@ -243,6 +243,14 @@ textinput_curses::external_edit_failed()
     return retval;
 }
 
+static void
+notify_cursor_move(textinput_curses& tc)
+{
+    if (tc.is_enabled() && !tc.tc_in_popup_change && tc.tc_on_cursor_move) {
+        tc.tc_on_cursor_move(tc);
+    }
+}
+
 class textinput_mouse_delegate : public text_delegate {
 public:
     textinput_mouse_delegate(textinput_curses* input) : tmd_input(input) {}
@@ -298,12 +306,16 @@ textinput_curses::textinput_curses()
     this->vc_enabled = false;
     this->vc_children.emplace_back(&this->tc_popup);
 
-    this->tc_popup.tc_cursor_role = role_t::VCR_CURSOR_LINE;
-    this->tc_popup.tc_disabled_cursor_role = role_t::VCR_DISABLED_CURSOR_LINE;
-    this->tc_popup.lv_border_left_role = role_t::VCR_POPUP_BORDER;
+    // The cursor-line role is too close to the popup background in some
+    // themes to tell which item is selected.
+    this->tc_popup.tc_cursor_role = role_t::VCR_FOCUSED;
+    this->tc_popup.tc_disabled_cursor_role = role_t::VCR_DISABLED_FOCUSED;
+    // The frame around the popup is drawn by draw_popup_overlay() since it
+    // can be shared with the info block.
     this->tc_popup.set_visible(false);
     this->tc_popup.set_title("textinput popup");
     this->tc_popup.set_head_space(0_vl);
+    this->tc_popup.set_tail_space(0_vl);
     this->tc_popup.set_selectable(true);
     this->tc_popup.set_show_scrollbar(true);
     this->tc_popup.set_default_role(role_t::VCR_POPUP);
@@ -400,6 +412,15 @@ textinput_curses::contains(int x, int y)
     auto child = view_curses::contains(x, y);
     if (child) {
         return child;
+    }
+
+    if (this->vc_enabled
+        && (this->tc_popup_frame.contains(x, y)
+            || this->tc_popup_info_frame.contains(x, y)))
+    {
+        // Keep clicks on the frame and info block away from the views
+        // underneath the popup.
+        return &this->tc_popup_shield;
     }
 
     if (this->vc_x <= x && x < this->vc_x + this->vc_width && this->vc_y <= y
@@ -550,6 +571,7 @@ textinput_curses::handle_mouse(mouse_event& me)
             this->set_needs_update();
         }
         this->ensure_cursor_visible();
+        notify_cursor_move(*this);
     }
 
     return true;
@@ -2045,6 +2067,7 @@ textinput_curses::move_cursor_by(movement move)
         this->set_needs_update();
     }
     this->ensure_cursor_visible();
+    notify_cursor_move(*this);
 }
 
 void
@@ -2060,6 +2083,7 @@ textinput_curses::move_cursor_to(input_point ip)
         this->set_needs_update();
     }
     this->ensure_cursor_visible();
+    notify_cursor_move(*this);
 }
 
 void
@@ -2076,6 +2100,7 @@ textinput_curses::update_lines()
     } else {
         this->tc_popup.set_visible(false);
         this->tc_complete_range = std::nullopt;
+        this->clear_popup_info();
         if (this->tc_on_change) {
             this->tc_on_change(*this);
         }
@@ -2160,6 +2185,7 @@ textinput_curses::blur()
 {
     this->tc_popup_type = popup_type_t::none;
     this->tc_popup.set_visible(false);
+    this->clear_popup_info();
     this->vc_enabled = false;
     this->move_cursor_to(input_point::home());
     if (this->tc_on_blur) {
@@ -2207,15 +2233,7 @@ textinput_curses::do_update()
         return retval;
     }
 
-    auto popup_height = this->tc_popup.get_height();
-    auto rel_y = (this->tc_popup_type == popup_type_t::history
-                      ? 0
-                      : this->tc_cursor.y - this->tc_top)
-        - popup_height;
-    if (this->vc_y + rel_y < 0) {
-        rel_y = this->tc_cursor.y - this->tc_top + popup_height + 1;
-    }
-    this->tc_popup.set_y(this->vc_y + rel_y);
+    this->layout_popup();
 
     if (!this->vc_needs_update) {
         return view_curses::do_update();
@@ -2429,7 +2447,58 @@ textinput_curses::do_update()
         }
     }
 
-    return view_curses::do_update() || retval;
+    // The popup is a child view, the frame and info block go around it.
+    view_curses::do_update();
+    this->draw_popup_overlay();
+
+    return retval;
+}
+
+// The directions that a cell in the frame of the popup connects to.
+static constexpr uint8_t FRAME_UP = 1;
+static constexpr uint8_t FRAME_DOWN = 2;
+static constexpr uint8_t FRAME_LEFT = 4;
+static constexpr uint8_t FRAME_RIGHT = 8;
+
+static const char*
+frame_graphic(uint8_t dirs)
+{
+    switch (dirs) {
+        case FRAME_UP:
+        case FRAME_DOWN:
+        case FRAME_UP | FRAME_DOWN:
+            return NCACS_VLINE;
+        case FRAME_RIGHT | FRAME_DOWN:
+            return NCACS_ULCORNER;
+        case FRAME_LEFT | FRAME_DOWN:
+            return NCACS_URCORNER;
+        case FRAME_RIGHT | FRAME_UP:
+            return NCACS_LLCORNER;
+        case FRAME_LEFT | FRAME_UP:
+            return NCACS_LRCORNER;
+        case FRAME_UP | FRAME_DOWN | FRAME_RIGHT:
+            return NCACS_LTEE;
+        case FRAME_UP | FRAME_DOWN | FRAME_LEFT:
+            return NCACS_RTEE;
+        case FRAME_LEFT | FRAME_RIGHT | FRAME_DOWN:
+            return NCACS_TTEE;
+        case FRAME_LEFT | FRAME_RIGHT | FRAME_UP:
+            return NCACS_BTEE;
+        case FRAME_UP | FRAME_DOWN | FRAME_LEFT | FRAME_RIGHT:
+            return NCACS_PLUS;
+        default:
+            return NCACS_HLINE;
+    }
+}
+
+static bool
+popup_goes_above(int input_y, unsigned int full_height)
+{
+    const auto space_below = (int) full_height - input_y - 1;
+
+    // The popup opens over the content above the input unless there is
+    // hardly any room there.
+    return input_y >= 4 || input_y >= space_below;
 }
 
 void
@@ -2446,25 +2515,14 @@ textinput_curses::open_popup_for_completion(
     auto max_width = possibilities
         | lnav::itertools::map(&attr_line_t::column_width)
         | lnav::itertools::max();
-
-    auto full_width = std::min((int) max_width.value_or(1) + 3, dim.dr_width);
     auto new_sel = 0_vl;
-    auto popup_height = vis_line_t(
-        std::min(this->tc_max_popup_height, possibilities.size() + 1));
-    ssize_t rel_x = crange.lr_start;
-    if (this->tc_cursor.y == 0) {
-        rel_x += this->tc_prefix.column_width();
-    }
-    if (rel_x + full_width > dim.dr_width) {
-        rel_x = dim.dr_width - full_width;
-    }
-    if (this->vc_x + rel_x > 0) {
-        rel_x -= 1;  // XXX for border
-    }
-    auto rel_y = this->tc_cursor.y - this->tc_top - popup_height;
-    if (this->vc_y + rel_y < 0) {
-        rel_y = this->tc_cursor.y - this->tc_top + 1;
-    } else {
+
+    this->tc_popup_left = crange.lr_start;
+    this->tc_popup_content_width = max_width.value_or(1);
+    this->tc_popup_above = popup_goes_above(
+        this->vc_y + this->tc_cursor.y - this->tc_top, dim.dr_full_height);
+    if (this->tc_popup_above) {
+        // The best match goes next to the input.
         std::reverse(possibilities.begin(), possibilities.end());
         new_sel = vis_line_t(possibilities.size() - 1);
     }
@@ -2474,13 +2532,10 @@ textinput_curses::open_popup_for_completion(
                                    this->tc_cursor.copy_with_x(crange.lr_end));
     this->tc_popup_source.replace_with(possibilities);
     this->tc_popup.set_window(this->tc_window);
-    this->tc_popup.set_x(this->vc_x + rel_x);
-    this->tc_popup.set_y(this->vc_y + rel_y);
-    this->tc_popup.set_width(full_width);
-    this->tc_popup.set_height(popup_height);
     this->tc_popup.set_visible(true);
     this->tc_popup.set_top(0_vl);
     this->tc_popup.set_selection(new_sel);
+    this->layout_popup();
     this->set_needs_update();
 }
 
@@ -2493,13 +2548,13 @@ textinput_curses::open_popup_for_history(std::vector<attr_line_t> possibilities)
     }
 
     this->tc_popup_type = popup_type_t::history;
+    this->clear_popup_info();
+    auto dim = this->get_visible_dimensions();
     auto new_sel = 0_vl;
-    auto popup_height = vis_line_t(
-        std::min(this->tc_max_popup_height, possibilities.size() + 1));
-    auto rel_y = this->tc_cursor.y - this->tc_top - popup_height;
-    if (this->vc_y + rel_y < 0) {
-        rel_y = this->tc_cursor.y - this->tc_top - popup_height;
-    } else {
+
+    this->tc_popup_left = 0;
+    this->tc_popup_above = popup_goes_above(this->vc_y, dim.dr_full_height);
+    if (this->tc_popup_above) {
         std::reverse(possibilities.begin(), possibilities.end());
         new_sel = vis_line_t(possibilities.size() - 1);
     }
@@ -2513,19 +2568,430 @@ textinput_curses::open_popup_for_history(std::vector<attr_line_t> possibilities)
     this->tc_popup_source.replace_with(possibilities);
     this->tc_popup.set_window(this->tc_window);
     this->tc_popup.set_title("History");
-    this->tc_popup.set_x(this->vc_x);
-    this->tc_popup.set_y(this->vc_y + rel_y);
-    this->tc_popup.set_width(this->vc_width);
-    this->tc_popup.set_height(popup_height);
+    this->tc_popup.set_visible(true);
     this->tc_popup.set_top(0_vl);
     this->tc_popup.set_selection(new_sel);
-    this->tc_popup.set_visible(true);
+    this->layout_popup();
     if (this->tc_on_popup_change) {
         this->tc_in_popup_change = true;
         this->tc_on_popup_change(*this);
         this->tc_in_popup_change = false;
     }
     this->set_needs_update();
+}
+
+void
+textinput_curses::set_popup_info(popup_info_layout_t layout,
+                                 std::vector<attr_line_t> lines,
+                                 int left)
+{
+    this->tc_popup_info_layout
+        = lines.empty() ? popup_info_layout_t::none : layout;
+    this->tc_popup_info = std::move(lines);
+    this->tc_popup_info_left = left;
+    this->set_needs_update();
+}
+
+void
+textinput_curses::clear_popup_info()
+{
+    if (this->tc_popup_info_layout == popup_info_layout_t::none) {
+        return;
+    }
+
+    this->tc_popup_info_layout = popup_info_layout_t::none;
+    this->tc_popup_info.clear();
+    this->set_needs_update();
+}
+
+int
+textinput_curses::get_popup_list_width() const
+{
+    const auto dim = this->get_visible_dimensions();
+    const auto max_width = std::max(1, dim.dr_width - 2);
+
+    if (this->tc_popup_type == popup_type_t::history) {
+        return max_width;
+    }
+
+    // A column of padding after the widest item and one for the scrollbar.
+    auto retval = this->tc_popup_content_width + 2;
+    const auto title_width
+        = (int) string_fragment::from_str(this->tc_popup.get_title())
+              .column_width();
+    if (title_width > 0) {
+        // The title sits between a pair of tees in the top border.
+        retval = std::max(retval, title_width + 2);
+    }
+
+    return std::min(retval, max_width);
+}
+
+int
+textinput_curses::get_side_info_width() const
+{
+    if (!this->tc_popup.is_visible()
+        || this->tc_popup_type != popup_type_t::completion)
+    {
+        return 0;
+    }
+
+    const auto dim = this->get_visible_dimensions();
+    // Three columns go to the frame around the list and the block and two
+    // to the padding around the text in the block.
+    const auto retval = std::min(
+        MAX_SIDE_INFO_WIDTH, dim.dr_width - this->get_popup_list_width() - 5);
+
+    return retval >= MIN_SIDE_INFO_WIDTH ? retval : 0;
+}
+
+void
+textinput_curses::layout_popup()
+{
+    this->tc_popup_frame = {};
+    this->tc_popup_info_frame = {};
+
+    const auto list_visible = this->tc_popup.is_visible();
+    auto info_layout = this->tc_popup_info.empty()
+        ? popup_info_layout_t::none
+        : this->tc_popup_info_layout;
+    auto side_width = 0;
+
+    if (this->tc_popup_type == popup_type_t::history) {
+        info_layout = popup_info_layout_t::none;
+    }
+    if (info_layout == popup_info_layout_t::side) {
+        side_width = list_visible ? this->get_side_info_width() : 0;
+        if (side_width == 0) {
+            info_layout = popup_info_layout_t::none;
+        }
+    }
+    if (!list_visible && info_layout == popup_info_layout_t::none) {
+        return;
+    }
+
+    const auto dim = this->get_visible_dimensions();
+    const auto input_y = this->vc_y
+        + (this->tc_popup_type == popup_type_t::history
+               ? 0
+               : this->tc_cursor.y - this->tc_top);
+    const auto above = list_visible
+        ? this->tc_popup_above
+        : popup_goes_above(input_y, dim.dr_full_height);
+    const auto item_count
+        = list_visible ? (int) this->tc_popup.get_inner_height() : 0;
+    const auto list_width = list_visible ? this->get_popup_list_width() : 0;
+    auto list_rows = std::min(item_count, (int) this->tc_max_popup_height - 1);
+    auto info_rows = 0;
+    // The width of the text in the info block and the padding around it.
+    auto info_width = 0;
+    // The rows that are taken up by the frame.
+    auto frame_rows = 2;
+
+    switch (info_layout) {
+        case popup_info_layout_t::none:
+            break;
+        case popup_info_layout_t::side:
+            info_width = side_width + 2;
+            info_rows = std::clamp(
+                std::max(item_count, (int) this->tc_popup_info.size()),
+                1,
+                MAX_SIDE_INFO_ROWS);
+            list_rows = std::min(item_count, info_rows);
+            break;
+        case popup_info_layout_t::above:
+            for (const auto& al : this->tc_popup_info) {
+                info_width = std::max(info_width, (int) al.column_width());
+            }
+            info_width
+                = std::clamp(info_width + 2, 1, std::max(1, dim.dr_width - 2));
+            info_rows = this->tc_popup_info.size();
+            if (list_visible) {
+                // The block and the list share a border.
+                frame_rows = 3;
+                list_rows = std::min(item_count, MAX_ABOVE_INFO_LIST_ROWS);
+            }
+            break;
+    }
+
+    auto margin = this->tc_popup_margin;
+    if (!list_visible && above) {
+        margin += this->tc_popup_info_margin;
+    }
+
+    // Shrink to fit between the input and the edge of the window.
+    const auto avail_rows = std::max(
+        0,
+        (above ? input_y : (int) dim.dr_full_height - input_y - 1) - margin
+            - frame_rows);
+    switch (info_layout) {
+        case popup_info_layout_t::none:
+            list_rows = std::min(list_rows, avail_rows);
+            break;
+        case popup_info_layout_t::side:
+            info_rows = std::min(info_rows, avail_rows);
+            list_rows = std::min(list_rows, info_rows);
+            break;
+        case popup_info_layout_t::above:
+            if (list_visible) {
+                // The list is the part that can be acted on, so it gets a
+                // row before the block gets any.
+                info_rows = std::min(info_rows, std::max(0, avail_rows - 1));
+                list_rows = std::min(list_rows, avail_rows - info_rows);
+            } else {
+                info_rows = std::min(info_rows, avail_rows);
+            }
+            if (info_rows == 0) {
+                info_layout = popup_info_layout_t::none;
+            }
+            break;
+    }
+    if (list_visible && list_rows <= 0) {
+        this->tc_popup.set_height(0_vl);
+        return;
+    }
+    if (!list_visible && info_layout == popup_info_layout_t::none) {
+        return;
+    }
+
+    auto total_rows = list_rows + 2;
+    switch (info_layout) {
+        case popup_info_layout_t::none:
+            break;
+        case popup_info_layout_t::side:
+            total_rows = info_rows + 2;
+            break;
+        case popup_info_layout_t::above:
+            total_rows = info_rows + 2 + (list_visible ? list_rows + 1 : 0);
+            break;
+    }
+
+    const auto top
+        = above ? input_y - margin - total_rows : input_y + 1 + margin;
+    const auto prefix_width
+        = this->tc_cursor.y == 0 ? (int) this->tc_prefix.column_width() : 0;
+    const auto x_for = [&](int left, int width) {
+        // The border goes in the column before the text.
+        const auto rel_x = std::min(
+            left + prefix_width - this->tc_left - 1, dim.dr_width - width);
+
+        return this->vc_x + std::max(0, rel_x);
+    };
+
+    if (list_visible) {
+        const auto is_side = info_layout == popup_info_layout_t::side;
+        const auto frame_height = (is_side ? info_rows : list_rows) + 2;
+        const auto frame_width = list_width + 2;
+        auto frame_y = top;
+        auto list_y = top + 1;
+
+        if (info_layout == popup_info_layout_t::above) {
+            frame_y += info_rows + 1;
+            list_y = frame_y + 1;
+        } else if (is_side && above) {
+            // Keep a short list next to the input.
+            list_y += info_rows - list_rows;
+        }
+
+        this->tc_popup_frame = {
+            x_for(this->tc_popup_left,
+                  frame_width + (is_side ? info_width + 1 : 0)),
+            frame_y,
+            frame_width,
+            frame_height,
+        };
+        if (is_side) {
+            // The block shares the right border of the list.
+            this->tc_popup_info_frame = {
+                this->tc_popup_frame.pf_x + frame_width - 1,
+                frame_y,
+                info_width + 2,
+                frame_height,
+            };
+        }
+
+        this->tc_popup.set_x(this->tc_popup_frame.pf_x + 1);
+        this->tc_popup.set_y(list_y);
+        this->tc_popup.set_width(list_width);
+        this->tc_popup.set_height(vis_line_t(list_rows));
+
+        // Show as much of the list as possible with the selection in view.
+        // The top is not left for the list to work out since it does not
+        // scroll back when the list gets taller.  Moving the top is safe
+        // here since set_top() only changes the selection when it would
+        // end up out of view.
+        const auto sel = (int) this->tc_popup.get_selection().value_or(0_vl);
+        const auto new_top = std::min(
+            std::clamp((int) this->tc_popup.get_top(),
+                       std::max(0, sel - (list_rows - 1)),
+                       sel),
+            std::max(0, item_count - list_rows));
+        this->tc_popup.set_top(vis_line_t(new_top));
+    }
+    if (info_layout == popup_info_layout_t::above) {
+        this->tc_popup_info_frame = {
+            x_for(this->tc_popup_info_left, info_width + 2),
+            top,
+            info_width + 2,
+            info_rows + 2,
+        };
+    }
+}
+
+void
+textinput_curses::draw_popup_overlay()
+{
+    static auto& vc = view_colors::singleton();
+
+    const auto& list_frame = this->tc_popup_frame;
+    const auto& info_frame = this->tc_popup_info_frame;
+
+    if (list_frame.empty() && info_frame.empty()) {
+        return;
+    }
+
+    if (!info_frame.empty()) {
+        const auto rows = info_frame.pf_height - 2;
+        const auto lr = line_range{0, info_frame.pf_width - 2};
+
+        for (auto row = 0; row < rows; row++) {
+            attr_line_t al;
+
+            if (row == rows - 1 && (int) this->tc_popup_info.size() > rows) {
+                // There is more than can be shown.
+                al.append(lnav::roles::hidden("⋯"));
+            } else if (row < (int) this->tc_popup_info.size()) {
+                al = this->tc_popup_info[row];
+            }
+            al.insert(0, 1, ' ');
+            mvwattrline(this->tc_window,
+                        info_frame.pf_y + 1 + row,
+                        info_frame.pf_x + 1,
+                        al,
+                        lr,
+                        role_t::VCR_POPUP);
+        }
+    }
+
+    if (!list_frame.empty()) {
+        // Fill in the rows that a short list does not cover.
+        const auto lr = line_range{0, list_frame.pf_width - 2};
+        const auto list_top = this->tc_popup.get_y();
+        const auto list_bottom = list_top + (int) this->tc_popup.get_height();
+
+        for (auto y = list_frame.pf_y + 1;
+             y < list_frame.pf_y + list_frame.pf_height - 1;
+             y++)
+        {
+            if (list_top <= y && y < list_bottom) {
+                continue;
+            }
+
+            attr_line_t al;
+            mvwattrline(this->tc_window,
+                        y,
+                        list_frame.pf_x + 1,
+                        al,
+                        lr,
+                        role_t::VCR_POPUP);
+        }
+    }
+
+    // The list and the info block can share a border, so work out how each
+    // cell in the frame connects to its neighbors before picking a graphic.
+    const popup_frame_t* frames[] = {&list_frame, &info_frame};
+    auto box_left = std::numeric_limits<int>::max();
+    auto box_top = std::numeric_limits<int>::max();
+    auto box_right = std::numeric_limits<int>::min();
+    auto box_bottom = std::numeric_limits<int>::min();
+
+    for (const auto* frame : frames) {
+        if (frame->empty()) {
+            continue;
+        }
+        box_left = std::min(box_left, frame->pf_x);
+        box_top = std::min(box_top, frame->pf_y);
+        box_right = std::max(box_right, frame->pf_x + frame->pf_width);
+        box_bottom = std::max(box_bottom, frame->pf_y + frame->pf_height);
+    }
+
+    const auto box_width = box_right - box_left;
+    std::vector<uint8_t> frame_dirs(box_width * (box_bottom - box_top));
+    const auto connect = [&](int x, int y, uint8_t dir) {
+        frame_dirs[(y - box_top) * box_width + (x - box_left)] |= dir;
+    };
+
+    for (const auto* frame : frames) {
+        if (frame->empty()) {
+            continue;
+        }
+
+        const auto left = frame->pf_x;
+        const auto right = left + frame->pf_width - 1;
+        const auto top = frame->pf_y;
+        const auto bottom = top + frame->pf_height - 1;
+
+        for (auto x = left; x < right; x++) {
+            connect(x, top, FRAME_RIGHT);
+            connect(x + 1, top, FRAME_LEFT);
+            connect(x, bottom, FRAME_RIGHT);
+            connect(x + 1, bottom, FRAME_LEFT);
+        }
+        for (auto y = top; y < bottom; y++) {
+            connect(left, y, FRAME_DOWN);
+            connect(left, y + 1, FRAME_UP);
+            connect(right, y, FRAME_DOWN);
+            connect(right, y + 1, FRAME_UP);
+        }
+    }
+
+    unsigned int full_height, full_width;
+    ncplane_dim_yx(this->tc_window, &full_height, &full_width);
+
+    const auto border_attrs = vc.attrs_for_role(role_t::VCR_POPUP_BORDER);
+    const auto border_channels = view_colors::to_channels(border_attrs);
+    const auto put_graphic = [&](int x, int y, const char* graphic) {
+        if (x < 0 || y < 0 || x >= (int) full_width || y >= (int) full_height) {
+            return;
+        }
+        ncplane_putstr_yx(this->tc_window, y, x, graphic);
+        ncplane_set_cell_yx(this->tc_window,
+                            y,
+                            x,
+                            border_attrs.ta_attrs | NCSTYLE_ALTCHARSET,
+                            border_channels);
+    };
+
+    for (auto y = box_top; y < box_bottom; y++) {
+        for (auto x = box_left; x < box_right; x++) {
+            const auto dirs
+                = frame_dirs[(y - box_top) * box_width + (x - box_left)];
+
+            if (dirs != 0) {
+                put_graphic(x, y, frame_graphic(dirs));
+            }
+        }
+    }
+
+    const auto& title = this->tc_popup.get_title();
+    const auto title_width
+        = (int) string_fragment::from_str(title).column_width();
+    if (!list_frame.empty() && title_width > 0
+        && title_width + 4 <= list_frame.pf_width)
+    {
+        auto title_al = attr_line_t().append(
+            title, VC_STYLE.value(text_attrs::with_bold()));
+
+        put_graphic(list_frame.pf_x + 1, list_frame.pf_y, NCACS_RTEE);
+        mvwattrline(this->tc_window,
+                    list_frame.pf_y,
+                    list_frame.pf_x + 2,
+                    title_al,
+                    line_range{0, title_width},
+                    role_t::VCR_POPUP_BORDER);
+        put_graphic(
+            list_frame.pf_x + 2 + title_width, list_frame.pf_y, NCACS_LTEE);
+    }
 }
 
 void

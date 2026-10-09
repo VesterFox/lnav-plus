@@ -853,6 +853,7 @@ layout_views()
     lnav_data.ld_status[LNS_TOP].set_width(width);
 
     bottom -= 1;
+    const int bottom_status_y = bottom;
     lnav_data.ld_status[LNS_BOTTOM].set_y(bottom);
     lnav_data.ld_status[LNS_BOTTOM].set_width(width);
     lnav_data.ld_status[LNS_BOTTOM].set_enabled(!config_panel_open
@@ -911,6 +912,17 @@ layout_views()
     lnav_data.ld_status[LNS_DOC].set_y(bottom);
     lnav_data.ld_status[LNS_DOC].set_width(width);
     lnav_data.ld_status[LNS_DOC].set_visible(has_doc && vis);
+
+    {
+        // The hint block of the prompt stays up while typing, so it goes
+        // on top of the preview and help panels instead of over them.
+        const int panel_rows = bottom_status_y - bottom;
+
+        if (prompt.p_editor.tc_popup_info_margin != panel_rows) {
+            prompt.p_editor.tc_popup_info_margin = panel_rows;
+            prompt.p_editor.set_needs_update();
+        }
+    }
 
     if (is_timeline) {
         vis = bottom.try_consume(lnav_data.ld_timeline_details_view.get_height()

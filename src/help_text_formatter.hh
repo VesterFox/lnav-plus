@@ -41,6 +41,8 @@ using help_example_to_attr_line_fun_t
 enum class help_text_content {
     synopsis,
     synopsis_and_summary,
+    /** Everything except for the list of related help topics. */
+    details,
     full,
 };
 
@@ -48,6 +50,18 @@ void format_help_text_for_term(const help_text& ht,
                                size_t width,
                                attr_line_t& out,
                                help_text_content htc = help_text_content::full);
+
+/**
+ * Append the parameters of a command as they are shown in its synopsis.
+ *
+ * @param ht The help text for the command.
+ * @param out The line to append the parameters to.
+ * @param current The parameter that is being entered, if any.  It is given
+ *   the "focused" role instead of the "variable" role.
+ */
+void format_command_params_for_term(const help_text& ht,
+                                    attr_line_t& out,
+                                    const help_text* current = nullptr);
 
 void format_example_text_for_term(const help_text& ht,
                                   help_example_to_attr_line_fun_t eval,
